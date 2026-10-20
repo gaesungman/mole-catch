@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>두더지 잡기</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      background: linear-gradient(#bfe6ff, #e8f7d4);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 12px;
+      user-select: none;
+      color: #3b2a1a;
+    }
+
+    h1 { font-size: 32px; margin-bottom: 12px; }
+
+    .hud {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .hud div {
+      background: #fff;
+      border-radius: 12px;
+      padding: 8px 16px;
+      font-size: 18px;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(0,0,0,.12);
+      min-width: 92px;
+      text-align: center;
+    }
+
+    .board {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      width: min(92vw, 420px);
+      background: #7cc35a;
+      padding: 18px;
+      border-radius: 20px;
+      box-shadow: 0 6px 0 #5a9a3e;
+    }
+
+    .hole {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      overflow: hidden;
+      background: radial-gradient(ellipse at 50% 75%, #3a2414 45%, #5b3a22 70%);
+      cursor: pointer;
+    }
+
+    /* 두더지 (CSS로 그림) */
+    .mole {
+      position: absolute;
+      left: 15%;
+      width: 70%;
+      height: 80%;
+      top: 100%;
+      background: #8b5a2b;
+      border-radius: 50% 50% 40% 40%;
+      transition: top 0.12s ease-out;
+    }
+    .mole::before, .mole::after { /* 눈 */
+      content: "";
+      position: absolute;
+      top: 28%;
+      width: 12%;
+      height: 14%;
+      background: #1a1a1a;
+      border-radius: 50%;
+    }
+    .mole::before { left: 28%; }
+    .mole::after { right: 28%; }
+    .mole .nose {
+      position: absolute;
+      top: 45%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 26%;
+      height: 16%;
+      background: #f29bb0;
+      border-radius: 50%;
+    }
+    .hole.up .mole { top: 22%; }
+    .hole.hit .mole { background: #c0392b; top: 22%; }
+    .hole.hit .mole::before, .hole.hit .mole::after {
+      background: transparent;
+      height: 4%;
+      border-top: 3px solid #1a1a1a;
+      border-radius: 0;
+    }
+
+    .pop {
+      position: absolute;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 22px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 2px 3px rgba(0,0,0,.4);
+      pointer-events: none;
+      animation: pop 0.5s ease-out forwards;
+    }
+    @keyframes pop {
+      from { opacity: 1; transform: translate(-50%, 0); }
+      to   { opacity: 0; transform: translate(-50%, -30px); }
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.88);
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      padding: 20px;
+    }
+    .overlay.hidden { display: none; }
+    .overlay p { font-size: 18px; line-height: 1.5; }
+    .overlay .big { font-size: 28px; font-weight: 800; }
+    .overlay .record { color: #d35400; font-weight: 800; }
+
+    button {
+      font: inherit;
+      font-size: 20px;
+      font-weight: 800;
+      color: #fff;
+      background: #e67e22;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 32px;
+      cursor: pointer;
+      box-shadow: 0 4px 0 #b35f12;
+    }
+    button:active { transform: translateY(3px); box-shadow: 0 1px 0 #b35f12; }
+
+    footer { margin-top: 18px; font-size: 13px; color: #5b6b4a; }
+  </style>
+</head>
+<body>
+  <h1>🔨 두더지 잡기</h1>
+
+  <div class="hud">
+    <div>점수 <span id="score">0</span></div>
+    <div>시간 <span id="time">30</span></div>
+    <div>최고 <span id="best">0</span></div>
+  </div>
+
+  <div class="board" id="board">
+    <div class="overlay" id="overlay">
+      <p class="big" id="msg-title">두더지를 잡아라!</p>
+      <p id="msg-body">30초 동안 튀어나오는 두더지를<br />최대한 많이 클릭(터치)하세요.</p>
+      <button id="start-btn">시작하기</button>
+    </div>
+  </div>
+
+  <footer>Made with Aside</footer>
+
+  <script>
+    const GAME_SECONDS = 30;
+    const board = document.getElementById("board");
+    const overlay = document.getElementById("overlay");
+    const scoreEl = document.getElementById("score");
+    const timeEl = document.getElementById("time");
+    const bestEl = document.getElementById("best");
+    const titleEl = document.getElementById("msg-title");
+    const bodyEl = document.getElementById("msg-body");
+    const startBtn = document.getElementById("start-btn");
+
+    // 구멍 9개 만들기
+    const holes = [];
+    for (let i = 0; i < 9; i++) {
+      const hole = document.createElement("div");
+      hole.className = "hole";
+      hole.innerHTML = '<div class="mole"><div class="nose"></div></div>';
+      hole.addEventListener("pointerdown", () => whack(hole));
+      board.insertBefore(hole, overlay);
+      holes.push(hole);
+    }
+
+    let score = 0;
+    let running = false;
+    let endTime = 0;
+    let lastHole = null;
+    let spawnTimer = null;
+    let tickTimer = null;
+    // 최고 기록 저장 (시크릿 모드 등 저장소가 막혀 있어도 게임은 동작하도록)
+    function loadBest() {
+      try { return Number(localStorage.getItem("mole-best") || 0); } catch (e) { return 0; }
+    }
+    function saveBest(value) {
+      try { localStorage.setItem("mole-best", value); } catch (e) {}
+    }
+    let best = loadBest();
+    bestEl.textContent = best;
+
+    function randomHole() {
+      let hole;
+      do { hole = holes[Math.floor(Math.random() * holes.length)]; }
+      while (hole === lastHole);
+      lastHole = hole;
+      return hole;
+    }
+
+    // 시간이 지날수록 두더지가 빨라짐
+    function upDuration() {
+      const elapsed = GAME_SECONDS - (endTime - Date.now()) / 1000;
+      return Math.max(450, 1000 - elapsed * 18);
+    }
+
+    function spawn() {
+      if (!running) return;
+      const hole = randomHole();
+      const duration = upDuration();
+      hole.classList.remove("hit");
+      hole.classList.add("up");
+      setTimeout(() => hole.classList.remove("up", "hit"), duration);
+      spawnTimer = setTimeout(spawn, duration + 150 + Math.random() * 250);
+    }
+
+    function whack(hole) {
+      if (!running || !hole.classList.contains("up") || hole.classList.contains("hit")) return;
+      hole.classList.add("hit");
+      score++;
+      scoreEl.textContent = score;
+      const pop = document.createElement("div");
+      pop.className = "pop";
+      pop.textContent = "+1";
+      hole.appendChild(pop);
+      setTimeout(() => pop.remove(), 500);
+      setTimeout(() => hole.classList.remove("up", "hit"), 200);
+    }
+
+    function tick() {
+      const left = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      timeEl.textContent = left;
+      if (left <= 0) endGame();
+    }
+
+    function startGame() {
+      score = 0;
+      scoreEl.textContent = 0;
+      timeEl.textContent = GAME_SECONDS;
+      overlay.classList.add("hidden");
+      running = true;
+      endTime = Date.now() + GAME_SECONDS * 1000;
+      tickTimer = setInterval(tick, 100);
+      spawn();
+    }
+
+    function endGame() {
+      running = false;
+      clearInterval(tickTimer);
+      clearTimeout(spawnTimer);
+      holes.forEach(h => h.classList.remove("up", "hit"));
+
+      let recordText = "";
+      if (score > best) {
+        best = score;
+        saveBest(best);
+        bestEl.textContent = best;
+        recordText = '<br /><span class="record">🎉 최고 기록 갱신!</span>';
+      }
+      titleEl.textContent = "게임 끝!";
+      bodyEl.innerHTML = `이번 점수: <b>${score}점</b>${recordText}`;
+      startBtn.textContent = "다시 하기";
+      overlay.classList.remove("hidden");
+    }
+
+    startBtn.addEventListener("click", startGame);
+  </script>
+</body>
+</html>
