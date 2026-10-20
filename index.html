@@ -91,6 +91,11 @@
       border-radius: 50%;
     }
     .hole.up .mole { top: 22%; }
+    /* 황금 두더지 */
+    .hole.gold .mole {
+      background: radial-gradient(circle at 35% 30%, #fff6b0, #f5c518 55%, #c99a06);
+      box-shadow: 0 0 14px 4px rgba(255, 215, 0, .8);
+    }
     .hole.hit .mole { background: #c0392b; top: 22%; }
     .hole.hit .mole::before, .hole.hit .mole::after {
       background: transparent;
@@ -111,6 +116,7 @@
       pointer-events: none;
       animation: pop 0.5s ease-out forwards;
     }
+    .pop.gold { color: #ffd700; font-size: 28px; }
     @keyframes pop {
       from { opacity: 1; transform: translate(-50%, 0); }
       to   { opacity: 0; transform: translate(-50%, -30px); }
@@ -134,6 +140,23 @@
     .overlay .big { font-size: 28px; font-weight: 800; }
     .overlay .record { color: #d35400; font-weight: 800; }
 
+    /* 게임 시간 선택 */
+    .time-select { display: flex; gap: 8px; }
+    .time-select button {
+      font-size: 16px;
+      padding: 8px 16px;
+      color: #3b2a1a;
+      background: #fff;
+      border: 2px solid #e0c9a6;
+      box-shadow: none;
+    }
+    .time-select button.selected {
+      color: #fff;
+      background: #8b5a2b;
+      border-color: #8b5a2b;
+    }
+    .time-select button:active { transform: none; box-shadow: none; }
+
     button {
       font: inherit;
       font-size: 20px;
@@ -156,14 +179,19 @@
 
   <div class="hud">
     <div>점수 <span id="score">0</span></div>
-    <div>시간 <span id="time">30</span></div>
+    <div>시간 <span id="time">20</span></div>
     <div>최고 <span id="best">0</span></div>
   </div>
 
   <div class="board" id="board">
     <div class="overlay" id="overlay">
       <p class="big" id="msg-title">두더지를 잡아라!</p>
-      <p id="msg-body">30초 동안 튀어나오는 두더지를<br />최대한 많이 클릭(터치)하세요.</p>
+      <p id="msg-body">튀어나오는 두더지를 최대한 많이<br />클릭(터치)하세요.<br />✨ 황금 두더지는 <b>+3점</b>!</p>
+      <div class="time-select" id="time-select">
+        <button data-sec="20" class="selected">20초</button>
+        <button data-sec="30">30초</button>
+        <button data-sec="60">60초</button>
+      </div>
       <button id="start-btn">시작하기</button>
     </div>
   </div>
@@ -171,7 +199,8 @@
   <footer>Made with Aside</footer>
 
   <script>
-    const GAME_SECONDS = 30;
+    const GOLD_CHANCE = 0.12; // 황금 두더지 등장 확률 (12%)
+    let gameSeconds = 20;     // 선택한 게임 시간
     const board = document.getElementById("board");
     const overlay = document.getElementById("overlay");
     const scoreEl = document.getElementById("score");
@@ -199,14 +228,27 @@
     let spawnTimer = null;
     let tickTimer = null;
     // 최고 기록 저장 (시크릿 모드 등 저장소가 막혀 있어도 게임은 동작하도록)
+    // 시간별로 따로 저장 (예: mole-best-20)
     function loadBest() {
-      try { return Number(localStorage.getItem("mole-best") || 0); } catch (e) { return 0; }
+      try { return Number(localStorage.getItem("mole-best-" + gameSeconds) || 0); } catch (e) { return 0; }
     }
     function saveBest(value) {
-      try { localStorage.setItem("mole-best", value); } catch (e) {}
+      try { localStorage.setItem("mole-best-" + gameSeconds, value); } catch (e) {}
     }
     let best = loadBest();
     bestEl.textContent = best;
+
+    // 시간 선택 버튼
+    const timeButtons = document.querySelectorAll("#time-select button");
+    timeButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        gameSeconds = Number(btn.dataset.sec);
+        timeButtons.forEach(b => b.classList.toggle("selected", b === btn));
+        timeEl.textContent = gameSeconds;
+        best = loadBest();
+        bestEl.textContent = best;
+      });
+    });
 
     function randomHole() {
       let hole;
@@ -218,15 +260,18 @@
 
     // 시간이 지날수록 두더지가 빨라짐
     function upDuration() {
-      const elapsed = GAME_SECONDS - (endTime - Date.now()) / 1000;
+      const elapsed = gameSeconds - (endTime - Date.now()) / 1000;
       return Math.max(450, 1000 - elapsed * 18);
     }
 
     function spawn() {
       if (!running) return;
       const hole = randomHole();
-      const duration = upDuration();
-      hole.classList.remove("hit");
+      const isGold = Math.random() < GOLD_CHANCE;
+      // 황금 두더지는 조금 더 빨리 숨음
+      const duration = isGold ? upDuration() * 0.8 : upDuration();
+      hole.classList.remove("hit", "gold");
+      if (isGold) hole.classList.add("gold");
       hole.classList.add("up");
       setTimeout(() => hole.classList.remove("up", "hit"), duration);
       spawnTimer = setTimeout(spawn, duration + 150 + Math.random() * 250);
@@ -234,12 +279,14 @@
 
     function whack(hole) {
       if (!running || !hole.classList.contains("up") || hole.classList.contains("hit")) return;
+      const isGold = hole.classList.contains("gold");
+      const points = isGold ? 3 : 1;
       hole.classList.add("hit");
-      score++;
+      score += points;
       scoreEl.textContent = score;
       const pop = document.createElement("div");
-      pop.className = "pop";
-      pop.textContent = "+1";
+      pop.className = isGold ? "pop gold" : "pop";
+      pop.textContent = "+" + points;
       hole.appendChild(pop);
       setTimeout(() => pop.remove(), 500);
       setTimeout(() => hole.classList.remove("up", "hit"), 200);
@@ -254,10 +301,10 @@
     function startGame() {
       score = 0;
       scoreEl.textContent = 0;
-      timeEl.textContent = GAME_SECONDS;
+      timeEl.textContent = gameSeconds;
       overlay.classList.add("hidden");
       running = true;
-      endTime = Date.now() + GAME_SECONDS * 1000;
+      endTime = Date.now() + gameSeconds * 1000;
       tickTimer = setInterval(tick, 100);
       spawn();
     }
@@ -266,7 +313,7 @@
       running = false;
       clearInterval(tickTimer);
       clearTimeout(spawnTimer);
-      holes.forEach(h => h.classList.remove("up", "hit"));
+      holes.forEach(h => h.classList.remove("up", "hit", "gold"));
 
       let recordText = "";
       if (score > best) {
@@ -276,7 +323,7 @@
         recordText = '<br /><span class="record">🎉 최고 기록 갱신!</span>';
       }
       titleEl.textContent = "게임 끝!";
-      bodyEl.innerHTML = `이번 점수: <b>${score}점</b>${recordText}`;
+      bodyEl.innerHTML = `${gameSeconds}초 모드 점수: <b>${score}점</b>${recordText}<br />시간을 바꿔서 도전해 보세요.`;
       startBtn.textContent = "다시 하기";
       overlay.classList.remove("hidden");
     }
