@@ -189,7 +189,7 @@
     }
     .hud .sound-btn:active { transform: translateY(1px); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 
-    /* 게임이 끝날 때마다 나오는 명언 */
+    /* 게임이 끝날 때마다 나오는 따뜻한 한마디 */
     .quote {
       width: min(92vw, 420px);
       margin-top: 16px;
@@ -205,7 +205,7 @@
     .quote.show { opacity: 1; transform: translateY(0); }
     .quote.hidden { display: none; }
     .quote .text { font-size: 16px; font-weight: 700; word-break: keep-all; }
-    .quote .source { margin-top: 6px; font-size: 13px; color: #6b5640; }
+    .quote .emoji { font-size: 26px; margin-bottom: 4px; }
 
     footer { margin-top: 18px; font-size: 13px; color: #5b6b4a; }
   </style>
@@ -246,8 +246,8 @@
   </div>
 
   <div class="quote hidden" id="quote">
+    <p class="emoji" id="quote-emoji"></p>
     <p class="text" id="quote-text"></p>
-    <p class="source" id="quote-source"></p>
   </div>
 
   <footer>Made with Aside</footer>
@@ -348,35 +348,47 @@
       return { ensure, hit, gold, miss, startBgm, stopBgm, setMuted, isMuted: () => muted };
     })();
 
-    // ===== 명언 목록 (출처가 분명한 고전, 번역은 직접 함) =====
-    const QUOTES = [
-      ["아는 사람은 좋아하는 사람만 못하고, 좋아하는 사람은 즐기는 사람만 못하다.", "공자, 『논어』 옹야편"],
-      ["배우고 때때로 익히면 또한 기쁘지 아니한가.", "공자, 『논어』 학이편"],
-      ["잘못하고도 고치지 않는 것, 이것을 잘못이라 한다.", "공자, 『논어』 위령공편"],
-      ["세 사람이 길을 가면 그중에 반드시 나의 스승이 있다.", "공자, 『논어』 술이편"],
-      ["날이 추워진 뒤에야 소나무와 잣나무가 늦게 시든다는 것을 안다.", "공자, 『논어』 자한편"],
-      ["덕이 있는 사람은 외롭지 않으니, 반드시 이웃이 있다.", "공자, 『논어』 이인편"],
-      ["지혜로운 사람은 미혹되지 않고, 어진 사람은 근심하지 않으며, 용기 있는 사람은 두려워하지 않는다.", "공자, 『논어』 자한편"],
-      ["천 리 길도 발밑에서 시작된다.", "노자, 『도덕경』 64장"],
-      ["아름드리 나무도 털끝만 한 싹에서 자란다.", "노자, 『도덕경』 64장"],
-      ["남을 아는 사람은 지혜롭고, 자신을 아는 사람은 밝다.", "노자, 『도덕경』 33장"],
-      ["가장 좋은 것은 물과 같다.", "노자, 『도덕경』 8장"],
-      ["반걸음이라도 쌓지 않으면 천 리에 이를 수 없다.", "순자, 『순자』 권학편"],
-      ["하늘이 큰일을 맡기려 할 때는 먼저 그 마음을 괴롭게 한다.", "맹자, 『맹자』 고자 하편"],
-      ["죽고자 하면 살고, 살고자 하면 죽는다.", "이순신, 『난중일기』 정유년 9월 15일"],
-      ["검토하지 않는 삶은 살 가치가 없다.", "소크라테스, 플라톤 『변론』"],
-      ["같은 강물에 두 번 들어갈 수는 없다.", "헤라클레이토스"],
-      ["사람을 괴롭히는 것은 일 그 자체가 아니라, 그 일에 대한 생각이다.", "에픽테토스, 『엥케이리디온』 5장"],
-      ["행동을 가로막는 것이 오히려 행동을 앞으로 나아가게 한다. 길을 막는 것이 곧 길이 된다.", "마르쿠스 아우렐리우스, 『명상록』 5권 20장"],
+    // ===== 게임이 끝날 때마다 보여 줄 따뜻한 한마디 (직접 작성) =====
+    const MESSAGES = [
+      ["🌷", "오늘도 여기까지 온 당신, 정말 수고 많았어요."],
+      ["💛", "점수보다 즐거웠던 마음이 더 소중해요."],
+      ["🥤", "잠깐 쉬어 가도 괜찮아요. 물 한 잔 마시고 오세요."],
+      ["🎁", "당신의 웃음이 누군가에게는 오늘의 선물이에요."],
+      ["🍀", "실수해도 괜찮아요. 다시 하면 되니까요."],
+      ["☀️", "오늘 하루도 잘 버텨 낸 당신을 응원해요."],
+      ["🤗", "빠른 손보다 따뜻한 마음이 더 멋져요."],
+      ["👍", "당신은 생각보다 훨씬 잘하고 있어요."],
+      ["🙆", "어깨 한번 쭉 펴 볼까요? 오늘도 고생 많았어요."],
+      ["💌", "좋아하는 사람에게 안부 한 줄 보내 보는 건 어때요?"],
+      ["🐢", "천천히 가도 괜찮아요. 멈추지만 않으면 돼요."],
+      ["🏆", "지금 이 순간을 즐긴 당신이 진짜 승자예요."],
+      ["🌈", "당신이 있어서 누군가의 하루가 조금 더 밝아져요."],
+      ["✨", "오늘 잘한 일 하나만 떠올려 보세요. 분명 있을 거예요."],
+      ["👀", "눈이 피곤하면 먼 곳을 잠깐 바라봐 주세요."],
+      ["🎈", "기록은 다음에 깨면 되고, 오늘은 즐거웠으면 됐어요."],
+      ["💪", "아무도 몰라도 당신은 알잖아요. 충분히 잘했어요."],
+      ["🍰", "힘든 날엔 맛있는 거 먹어도 돼요. 그럴 자격 있어요."],
+      ["🐹", "함께 놀아 줘서 고마워요. 두더지들도 즐거웠대요."],
+      ["📣", "다음 판도 응원할게요. 할 수 있어요!"],
+      ["🌱", "오늘의 당신, 어제보다 한 뼘 더 자랐어요."],
+      ["💐", "너무 애쓰지 않아도 괜찮아요. 당신은 이미 소중해요."],
+      ["😊", "게임하는 동안 웃었다면, 그걸로 충분해요."],
+      ["🌬️", "걱정은 잠시 내려놓고, 숨 한번 크게 쉬어 봐요."],
+      ["🙏", "고마운 사람에게 \"고마워\" 한마디, 오늘 건네 볼까요?"],
+      ["🌙", "당신의 하루 끝이 포근하길 바라요."],
+      ["🌤️", "잘 안 풀리는 날도 지나가요. 내일은 더 좋을 거예요."],
+      ["🔨", "두더지는 놓쳐도, 좋은 하루는 놓치지 마세요."],
+      ["🖐️", "손목도 잠깐 돌려 주세요. 오래 즐기려면 쉬는 것도 중요해요."],
+      ["📬", "당신을 응원하는 사람이 생각보다 많아요."],
     ];
-    let lastQuote = -1;
+    let lastMessage = -1;
     const quoteBox = document.getElementById("quote");
     function showRandomQuote() {
       let i;
-      do { i = Math.floor(Math.random() * QUOTES.length); } while (i === lastQuote); // 같은 명언 연속 방지
-      lastQuote = i;
-      document.getElementById("quote-text").textContent = "“" + QUOTES[i][0] + "”";
-      document.getElementById("quote-source").textContent = "— " + QUOTES[i][1];
+      do { i = Math.floor(Math.random() * MESSAGES.length); } while (i === lastMessage); // 같은 한마디 연속 방지
+      lastMessage = i;
+      document.getElementById("quote-emoji").textContent = MESSAGES[i][0];
+      document.getElementById("quote-text").textContent = MESSAGES[i][1];
       quoteBox.classList.remove("hidden", "show");
       void quoteBox.offsetWidth; // 애니메이션 다시 시작
       quoteBox.classList.add("show");
