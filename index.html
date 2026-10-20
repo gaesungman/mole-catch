@@ -221,31 +221,6 @@
     .key-hint { display: none; font-size: 13px; color: #8a7560; }
     @media (hover: hover) and (pointer: fine) { .key-hint { display: block; } }
 
-    /* 한마디 도감 */
-    .quote .new-badge {
-      display: inline-block;
-      margin-left: 6px;
-      padding: 1px 7px;
-      font-size: 11px;
-      font-weight: 800;
-      color: #fff;
-      background: #e67e22;
-      border-radius: 8px;
-      vertical-align: 2px;
-    }
-    .collection {
-      width: min(92vw, 420px);
-      margin-top: 10px;
-      background: rgba(255,255,255,.55);
-      border-radius: 14px;
-      padding: 10px 16px;
-      font-size: 14px;
-    }
-    .collection summary { cursor: pointer; font-weight: 700; color: #6b5640; }
-    .collection ul { list-style: none; margin-top: 8px; max-height: 260px; overflow-y: auto; }
-    .collection li { padding: 5px 0; border-top: 1px dashed #e0c9a6; line-height: 1.5; }
-    .collection li.locked { color: #b3a28f; }
-
     /* 휴대폰처럼 좁은 화면: 끝 화면 글과 점수판을 조금 작게 */
     @media (max-width: 440px) {
       .hud { gap: 6px; }
@@ -302,11 +277,6 @@
     <p class="emoji" id="quote-emoji"></p>
     <p class="text" id="quote-text"></p>
   </div>
-
-  <details class="collection" id="collection">
-    <summary id="collection-title">📖 모은 한마디 0/30</summary>
-    <ul id="collection-list"></ul>
-  </details>
 
   <footer>Made with Aside</footer>
 
@@ -442,47 +412,12 @@
     let lastMessage = -1;
     const quoteBox = document.getElementById("quote");
 
-    // 한마디 도감: 만난 한마디 번호를 저장 (저장소가 막혀 있어도 이번 방문 동안은 기억)
-    let collected = [];
-    try { collected = JSON.parse(localStorage.getItem("mole-collected") || "[]"); } catch (e) { collected = []; }
-    function saveCollected() {
-      try { localStorage.setItem("mole-collected", JSON.stringify(collected)); } catch (e) {}
-    }
-    function renderCollection() {
-      const n = collected.length, total = MESSAGES.length;
-      document.getElementById("collection-title").textContent =
-        n >= total ? `📖 모은 한마디 ${n}/${total} 🎉 모두 모았어요!` : `📖 모은 한마디 ${n}/${total}`;
-      const list = document.getElementById("collection-list");
-      list.innerHTML = "";
-      MESSAGES.forEach((m, idx) => {
-        const li = document.createElement("li");
-        if (collected.includes(idx)) li.textContent = m[0] + " " + m[1];
-        else { li.className = "locked"; li.textContent = "🔒 아직 만나지 못한 한마디"; }
-        list.appendChild(li);
-      });
-    }
-
     function showRandomQuote() {
-      // 아직 못 만난 한마디가 있으면 60% 확률로 그중에서 고름 (도감 채우는 재미)
-      const unseen = MESSAGES.map((_, idx) => idx).filter(idx => !collected.includes(idx) && idx !== lastMessage);
       let i;
-      if (unseen.length && Math.random() < 0.6) {
-        i = unseen[Math.floor(Math.random() * unseen.length)];
-      } else {
-        do { i = Math.floor(Math.random() * MESSAGES.length); } while (i === lastMessage); // 같은 한마디 연속 방지
-      }
+      do { i = Math.floor(Math.random() * MESSAGES.length); } while (i === lastMessage); // 같은 한마디 연속 방지
       lastMessage = i;
-      const isNew = !collected.includes(i);
-      if (isNew) { collected.push(i); saveCollected(); renderCollection(); }
       document.getElementById("quote-emoji").textContent = MESSAGES[i][0];
-      const textEl = document.getElementById("quote-text");
-      textEl.textContent = MESSAGES[i][1];
-      if (isNew) {
-        const badge = document.createElement("span");
-        badge.className = "new-badge";
-        badge.textContent = "NEW";
-        textEl.appendChild(badge);
-      }
+      document.getElementById("quote-text").textContent = MESSAGES[i][1];
       quoteBox.classList.remove("hidden", "show");
       void quoteBox.offsetWidth; // 애니메이션 다시 시작
       quoteBox.classList.add("show");
@@ -691,32 +626,10 @@
     document.addEventListener("keydown", e => {
       const isStartKey = e.key === " " || e.key === "Enter" || e.code === "Space" || e.code === "Enter" || e.code === "NumpadEnter";
       if (!isStartKey) return;
-      if (e.target.closest && e.target.closest("summary")) return; // 도감 열고 닫기는 그대로
       e.preventDefault(); // 스페이스바로 화면이 스크롤되거나 버튼이 한 번 더 눌리는 것 방지
       if (!running && !e.repeat) startGame();
     });
 
-    renderCollection();
-
-    // 마우스로 도감을 열고 닫은 뒤에도 스페이스바·엔터가 게임 시작으로 동작하도록 포커스 해제
-    const collectionSummary = document.querySelector("#collection summary");
-    collectionSummary.addEventListener("mouseup", () => {
-      setTimeout(() => collectionSummary.blur(), 0);
-    });
-
-    // 소리 켜기/끄기 (설정은 다음 방문 때도 유지)
-    const soundBtn = document.getElementById("sound-btn");
-    function updateSoundBtn() {
-      const m = Sound.isMuted();
-      soundBtn.textContent = m ? "🔇" : "🔊";
-      soundBtn.setAttribute("aria-label", m ? "소리 켜기" : "소리 끄기");
-    }
-    soundBtn.addEventListener("click", () => {
-      Sound.ensure();
-      Sound.setMuted(!Sound.isMuted());
-      updateSoundBtn();
-    });
-    updateSoundBtn();
   </script>
 </body>
 </html>
