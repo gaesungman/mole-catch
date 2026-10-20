@@ -138,7 +138,7 @@
       padding: 20px;
     }
     .overlay.hidden { display: none; }
-    .overlay p { font-size: 18px; line-height: 1.5; }
+    .overlay p { font-size: 18px; line-height: 1.5; word-break: keep-all; }
     .overlay .big { font-size: 28px; font-weight: 800; }
     .overlay .record { color: #d35400; font-weight: 800; }
 
@@ -207,6 +207,58 @@
     .quote .text { font-size: 16px; font-weight: 700; word-break: keep-all; }
     .quote .emoji { font-size: 26px; margin-bottom: 4px; }
 
+    /* 최고 기록까지 남은 점수 안내 */
+    .overlay .nudge { color: #d35400; font-weight: 800; }
+    /* 15분 휴식 안내 */
+    .overlay .rest {
+      font-size: 15px;
+      background: #fff4e0;
+      border-radius: 10px;
+      padding: 6px 12px;
+      color: #8b5a2b;
+    }
+    /* 키보드 안내 (마우스·키보드 환경에서만 보임) */
+    .key-hint { display: none; font-size: 13px; color: #8a7560; }
+    @media (hover: hover) and (pointer: fine) { .key-hint { display: block; } }
+
+    /* 한마디 도감 */
+    .quote .new-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #fff;
+      background: #e67e22;
+      border-radius: 8px;
+      vertical-align: 2px;
+    }
+    .collection {
+      width: min(92vw, 420px);
+      margin-top: 10px;
+      background: rgba(255,255,255,.55);
+      border-radius: 14px;
+      padding: 10px 16px;
+      font-size: 14px;
+    }
+    .collection summary { cursor: pointer; font-weight: 700; color: #6b5640; }
+    .collection ul { list-style: none; margin-top: 8px; max-height: 260px; overflow-y: auto; }
+    .collection li { padding: 5px 0; border-top: 1px dashed #e0c9a6; line-height: 1.5; }
+    .collection li.locked { color: #b3a28f; }
+
+    /* 휴대폰처럼 좁은 화면: 끝 화면 글과 점수판을 조금 작게 */
+    @media (max-width: 440px) {
+      .hud { gap: 6px; }
+      .hud div { min-width: 0; padding: 7px 9px; font-size: 15px; }
+      .hud .sound-btn { width: 38px; font-size: 19px; line-height: 36px; }
+      .overlay { gap: 7px; padding: 12px; }
+      .overlay .big { font-size: 23px; }
+      .overlay p { font-size: 15px; line-height: 1.45; }
+      .overlay .rest { font-size: 13px; padding: 4px 10px; }
+      .time-select button { font-size: 15px; padding: 6px 12px; }
+      button { font-size: 18px; padding: 10px 26px; }
+    }
+
     footer { margin-top: 18px; font-size: 13px; color: #5b6b4a; }
   </style>
 </head>
@@ -242,6 +294,7 @@
         </div>
       </div>
       <button id="start-btn">시작하기</button>
+      <p class="key-hint">⌨️ 스페이스바나 엔터로도 시작할 수 있어요</p>
     </div>
   </div>
 
@@ -249,6 +302,11 @@
     <p class="emoji" id="quote-emoji"></p>
     <p class="text" id="quote-text"></p>
   </div>
+
+  <details class="collection" id="collection">
+    <summary id="collection-title">📖 모은 한마디 0/30</summary>
+    <ul id="collection-list"></ul>
+  </details>
 
   <footer>Made with Aside</footer>
 
@@ -383,12 +441,48 @@
     ];
     let lastMessage = -1;
     const quoteBox = document.getElementById("quote");
+
+    // 한마디 도감: 만난 한마디 번호를 저장 (저장소가 막혀 있어도 이번 방문 동안은 기억)
+    let collected = [];
+    try { collected = JSON.parse(localStorage.getItem("mole-collected") || "[]"); } catch (e) { collected = []; }
+    function saveCollected() {
+      try { localStorage.setItem("mole-collected", JSON.stringify(collected)); } catch (e) {}
+    }
+    function renderCollection() {
+      const n = collected.length, total = MESSAGES.length;
+      document.getElementById("collection-title").textContent =
+        n >= total ? `📖 모은 한마디 ${n}/${total} 🎉 모두 모았어요!` : `📖 모은 한마디 ${n}/${total}`;
+      const list = document.getElementById("collection-list");
+      list.innerHTML = "";
+      MESSAGES.forEach((m, idx) => {
+        const li = document.createElement("li");
+        if (collected.includes(idx)) li.textContent = m[0] + " " + m[1];
+        else { li.className = "locked"; li.textContent = "🔒 아직 만나지 못한 한마디"; }
+        list.appendChild(li);
+      });
+    }
+
     function showRandomQuote() {
+      // 아직 못 만난 한마디가 있으면 60% 확률로 그중에서 고름 (도감 채우는 재미)
+      const unseen = MESSAGES.map((_, idx) => idx).filter(idx => !collected.includes(idx) && idx !== lastMessage);
       let i;
-      do { i = Math.floor(Math.random() * MESSAGES.length); } while (i === lastMessage); // 같은 한마디 연속 방지
+      if (unseen.length && Math.random() < 0.6) {
+        i = unseen[Math.floor(Math.random() * unseen.length)];
+      } else {
+        do { i = Math.floor(Math.random() * MESSAGES.length); } while (i === lastMessage); // 같은 한마디 연속 방지
+      }
       lastMessage = i;
+      const isNew = !collected.includes(i);
+      if (isNew) { collected.push(i); saveCollected(); renderCollection(); }
       document.getElementById("quote-emoji").textContent = MESSAGES[i][0];
-      document.getElementById("quote-text").textContent = MESSAGES[i][1];
+      const textEl = document.getElementById("quote-text");
+      textEl.textContent = MESSAGES[i][1];
+      if (isNew) {
+        const badge = document.createElement("span");
+        badge.className = "new-badge";
+        badge.textContent = "NEW";
+        textEl.appendChild(badge);
+      }
       quoteBox.classList.remove("hidden", "show");
       void quoteBox.offsetWidth; // 애니메이션 다시 시작
       quoteBox.classList.add("show");
@@ -528,7 +622,15 @@
       if (left <= 0) endGame();
     }
 
+    // 15분 휴식 안내: 이번 방문에서 실제로 플레이한 시간을 누적 (5분 넘게 쉬면 다시 0부터)
+    const REST_AFTER_SEC = 15 * 60;
+    const IDLE_RESET_MS = 5 * 60 * 1000;
+    let playedSec = 0;
+    let lastEndAt = 0;
+
     function startGame() {
+      if (running) return; // 키보드·버튼 동시 입력으로 두 번 시작되는 것 방지
+      if (lastEndAt && Date.now() - lastEndAt > IDLE_RESET_MS) playedSec = 0;
       score = 0;
       scoreEl.textContent = 0;
       timeEl.textContent = gameSeconds;
@@ -548,21 +650,59 @@
       clearTimeout(spawnTimer);
       holes.forEach(h => h.classList.remove("up", "hit", "gold"));
 
-      let recordText = "";
+      // 최고 기록과 비교해 "한 판 더" 안내 (목표에 가까울수록 의욕이 커지는 효과)
+      let nudgeText;
       if (score > best) {
         best = score;
         saveBest(best);
         bestEl.textContent = best;
-        recordText = '<br /><span class="record">🎉 최고 기록 갱신!</span>';
+        nudgeText = '<span class="record">🎉 최고 기록 갱신!</span><br />이 기세로 한 판 더 해 볼까요?';
+      } else if (best === 0) {
+        nudgeText = "두더지를 잡아서 첫 기록을 만들어 보세요!";
+      } else if (score === best) {
+        nudgeText = '<span class="nudge">최고 기록과 동점! 1점만 더 하면 신기록이에요.</span>';
+      } else {
+        const gap = best - score;
+        const close = gap <= Math.max(3, Math.ceil(best * 0.2));
+        nudgeText = close
+          ? `<span class="nudge">최고 기록까지 ${gap}점! 한 판 더 해 볼까요?</span>`
+          : `최고 기록 ${best}점에 다시 도전해 보세요.`;
       }
+
+      // 휴식 안내
+      playedSec += gameSeconds;
+      lastEndAt = Date.now();
+      let restText = "";
+      if (playedSec >= REST_AFTER_SEC) {
+        restText = '<br /><span class="rest">👀 15분 넘게 즐겼어요. 잠깐 눈과 손목을 쉬어 가요.</span>';
+        playedSec = 0;
+      }
+
       titleEl.textContent = "게임 끝!";
-      bodyEl.innerHTML = `${level}단계(${LEVELS[level].name}) · ${gameSeconds}초 점수: <b>${score}점</b>${recordText}<br />난이도나 시간을 바꿔서 도전해 보세요.`;
+      bodyEl.innerHTML = `${level}단계(${LEVELS[level].name}) · ${gameSeconds}초 점수: <b>${score}점</b><br />${nudgeText}${restText}`;
       startBtn.textContent = "다시 하기";
       overlay.classList.remove("hidden");
       showRandomQuote();
     }
 
     startBtn.addEventListener("click", startGame);
+
+    // 스페이스바·엔터로 바로 시작 / 다시 하기
+    document.addEventListener("keydown", e => {
+      const isStartKey = e.key === " " || e.key === "Enter" || e.code === "Space" || e.code === "Enter" || e.code === "NumpadEnter";
+      if (!isStartKey) return;
+      if (e.target.closest && e.target.closest("summary")) return; // 도감 열고 닫기는 그대로
+      e.preventDefault(); // 스페이스바로 화면이 스크롤되거나 버튼이 한 번 더 눌리는 것 방지
+      if (!running && !e.repeat) startGame();
+    });
+
+    renderCollection();
+
+    // 마우스로 도감을 열고 닫은 뒤에도 스페이스바·엔터가 게임 시작으로 동작하도록 포커스 해제
+    const collectionSummary = document.querySelector("#collection summary");
+    collectionSummary.addEventListener("mouseup", () => {
+      setTimeout(() => collectionSummary.blur(), 0);
+    });
 
     // 소리 켜기/끄기 (설정은 다음 방문 때도 유지)
     const soundBtn = document.getElementById("sound-btn");
