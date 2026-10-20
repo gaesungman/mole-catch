@@ -175,6 +175,20 @@
     }
     button:active { transform: translateY(3px); box-shadow: 0 1px 0 #b35f12; }
 
+    /* 소리 켜기/끄기 버튼 */
+    .hud .sound-btn {
+      min-width: 0;
+      width: 44px;
+      padding: 0;
+      font-size: 22px;
+      line-height: 40px;
+      color: #3b2a1a;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.12);
+    }
+    .hud .sound-btn:active { transform: translateY(1px); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
     footer { margin-top: 18px; font-size: 13px; color: #5b6b4a; }
   </style>
 </head>
@@ -186,6 +200,7 @@
     <div>점수 <span id="score">0</span></div>
     <div>시간 <span id="time">20</span></div>
     <div>최고 <span id="best">0</span></div>
+    <button class="sound-btn" id="sound-btn" title="소리 켜기/끄기" aria-label="소리 끄기">🔊</button>
   </div>
 
   <div class="board" id="board">
@@ -215,6 +230,101 @@
   <footer>Made with Aside</footer>
 
   <script>
+    // ===== 소리 (Web Audio로 직접 만든 효과음·배경음악, 외부 음원 파일 없음) =====
+    const Sound = (() => {
+      let ctx = null, master = null, bgmGain = null, sfxGain = null;
+      let muted = false;
+      try { muted = localStorage.getItem("mole-muted") === "1"; } catch (e) {}
+
+      // 브라우저 정책상 첫 클릭(터치) 이후에만 소리를 낼 수 있어서, 그때 준비
+      function ensure() {
+        if (!ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return null;
+          ctx = new AC();
+          master = ctx.createGain(); master.gain.value = muted ? 0 : 1; master.connect(ctx.destination);
+          bgmGain = ctx.createGain(); bgmGain.gain.value = 0.35; bgmGain.connect(master);
+          sfxGain = ctx.createGain(); sfxGain.gain.value = 0.8; sfxGain.connect(master);
+        }
+        if (ctx.state === "suspended") ctx.resume();
+        return ctx;
+      }
+
+      // 음 하나 내기: 파형, 시작·끝 주파수, 길이, 볼륨
+      function tone(type, f1, f2, start, dur, vol, out) {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f1, start);
+        if (f2 !== f1) o.frequency.exponentialRampToValueAtTime(f2, start + dur);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(vol, start + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        o.connect(g); g.connect(out || sfxGain);
+        o.start(start); o.stop(start + dur + 0.02);
+      }
+
+      // 두더지 잡았을 때: "뿅"
+      function hit() {
+        if (!ensure()) return;
+        const t = ctx.currentTime;
+        tone("square", 900, 300, t, 0.09, 0.25);
+        tone("sine", 1400, 1400, t + 0.05, 0.08, 0.15);
+      }
+      // 황금 두더지: "띠링~" 올라가는 3음
+      function gold() {
+        if (!ensure()) return;
+        const t = ctx.currentTime;
+        [1047, 1319, 1568, 2093].forEach((f, i) => tone("triangle", f, f, t + i * 0.06, 0.16, 0.25));
+      }
+      // 헛손질(빈 구멍 클릭): 낮은 "퉁"
+      function miss() {
+        if (!ensure()) return;
+        const t = ctx.currentTime;
+        tone("triangle", 220, 70, t, 0.18, 0.35);
+      }
+
+      // --- 배경음악: 직접 작곡한 4마디 반복 멜로디 (8분음표 단위, 0 = 쉼표) ---
+      const MELODY = [76,0,79,76, 72,74,76,0,  77,0,81,77, 74,76,77,0,
+                      79,81,79,77, 76,74,72,0,  74,76,74,71, 72,0,0,0];
+      const BASS   = [48,0,43,0, 48,0,43,0,  41,0,48,0, 41,0,48,0,
+                      43,0,50,0, 43,0,50,0,  43,0,47,0, 48,0,0,0];
+      const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+      let bgmTimer = null, step = 0, nextTime = 0, bpm = 140;
+
+      function scheduleBgm() {
+        const eighth = 60 / bpm / 2;
+        while (nextTime < ctx.currentTime + 0.15) {
+          const m = MELODY[step % MELODY.length], b = BASS[step % BASS.length];
+          if (m) tone("square", midi(m), midi(m), nextTime, eighth * 0.9, 0.12, bgmGain);
+          if (b) tone("triangle", midi(b), midi(b), nextTime, eighth * 1.8, 0.3, bgmGain);
+          step++;
+          nextTime += eighth;
+        }
+      }
+      function startBgm(tempo) {
+        if (!ensure()) return;
+        stopBgm();
+        bpm = tempo; step = 0; nextTime = ctx.currentTime + 0.05;
+        scheduleBgm();
+        bgmTimer = setInterval(scheduleBgm, 30);
+      }
+      function stopBgm() { clearInterval(bgmTimer); bgmTimer = null; }
+
+      function setMuted(v) {
+        muted = v;
+        try { localStorage.setItem("mole-muted", v ? "1" : "0"); } catch (e) {}
+        if (master) master.gain.setValueAtTime(v ? 0 : 1, ctx.currentTime);
+      }
+
+      // 다른 탭으로 가면 소리 멈춤, 돌아오면 다시
+      document.addEventListener("visibilitychange", () => {
+        if (!ctx) return;
+        if (document.hidden) ctx.suspend(); else ctx.resume();
+      });
+
+      return { ensure, hit, gold, miss, startBgm, stopBgm, setMuted, isMuted: () => muted };
+    })();
+
     const GOLD_CHANCE = 0.12; // 황금 두더지 등장 확률 (12%)
     let gameSeconds = 20;     // 선택한 게임 시간
 
@@ -224,9 +334,9 @@
     //   speedUp : 1초 지날 때마다 줄어드는 시간 (클수록 빨리 빨라짐)
     //   gapMin, gapMax : 두더지가 숨은 뒤 다음 두더지가 나올 때까지 쉬는 시간
     const LEVELS = {
-      1: { name: "느림", startUp: 1400, minUp: 750, speedUp: 12, gapMin: 300, gapMax: 650 },
-      2: { name: "보통", startUp: 1000, minUp: 450, speedUp: 18, gapMin: 150, gapMax: 400 },
-      3: { name: "빠름", startUp: 700,  minUp: 320, speedUp: 22, gapMin: 60,  gapMax: 220 },
+      1: { name: "느림", bgmTempo: 120, startUp: 1400, minUp: 750, speedUp: 12, gapMin: 300, gapMax: 650 },
+      2: { name: "보통", bgmTempo: 140, startUp: 1000, minUp: 450, speedUp: 18, gapMin: 150, gapMax: 400 },
+      3: { name: "빠름", bgmTempo: 165, startUp: 700,  minUp: 320, speedUp: 22, gapMin: 60,  gapMax: 220 },
     };
     let level = 2;            // 선택한 난이도 (기본 2단계)
     const board = document.getElementById("board");
@@ -325,8 +435,11 @@
     }
 
     function whack(hole) {
-      if (!running || !hole.classList.contains("up") || hole.classList.contains("hit")) return;
+      if (!running) return;
+      if (!hole.classList.contains("up")) { Sound.miss(); return; } // 빈 구멍 클릭
+      if (hole.classList.contains("hit")) return;                    // 이미 잡은 두더지
       const isGold = hole.classList.contains("gold");
+      if (isGold) Sound.gold(); else Sound.hit();
       const points = isGold ? 3 : 1;
       hole.classList.add("hit");
       score += points;
@@ -353,11 +466,13 @@
       running = true;
       endTime = Date.now() + gameSeconds * 1000;
       tickTimer = setInterval(tick, 100);
+      Sound.startBgm(LEVELS[level].bgmTempo);
       spawn();
     }
 
     function endGame() {
       running = false;
+      Sound.stopBgm();
       clearInterval(tickTimer);
       clearTimeout(spawnTimer);
       holes.forEach(h => h.classList.remove("up", "hit", "gold"));
@@ -376,6 +491,20 @@
     }
 
     startBtn.addEventListener("click", startGame);
+
+    // 소리 켜기/끄기 (설정은 다음 방문 때도 유지)
+    const soundBtn = document.getElementById("sound-btn");
+    function updateSoundBtn() {
+      const m = Sound.isMuted();
+      soundBtn.textContent = m ? "🔇" : "🔊";
+      soundBtn.setAttribute("aria-label", m ? "소리 켜기" : "소리 끄기");
+    }
+    soundBtn.addEventListener("click", () => {
+      Sound.ensure();
+      Sound.setMuted(!Sound.isMuted());
+      updateSoundBtn();
+    });
+    updateSoundBtn();
   </script>
 </body>
 </html>
